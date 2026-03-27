@@ -1,5 +1,6 @@
 # 构建 Dockerfile.openclaw 并推送到 GitHub Container Registry (ghcr.io)
-# 推送后镜像地址示例：ghcr.io/<你的GitHub用户名或组织>/<仓库名>:latest
+# 镜像名：ghcr.io/<owner>/openclaw
+# 每次推送两个标签：latest（固定）与版本标签（手动输入 / git 标签 v* / 分支-短 SHA）
 
 name: Build and push to GHCR
 
@@ -8,6 +9,11 @@ on:
     branches: [main, master]
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      version_tag:
+        description: "镜像版本标签（不含 openclaw:），例如 v2026.3.24；留空则分支构建用 分支名-短 SHA"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -34,15 +40,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Docker metadata (tags/labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
+      - name: Set image URI and version tag
+        id: image
+        shell: bash
+        env:
+          VERSION_TAG_INPUT: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version_tag || '' }}
+        run: |
+          REPO_LOWER="$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')"
+          IMAGE="ghcr.io/${REPO_LOWER}/openclaw"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] && [ -n "${VERSION_TAG_INPUT//[[:space:]]/}" ]; then
+            VERSION="${VERSION_TAG_INPUT//[[:space:]]/}"
+          elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            SHORT="${GITHUB_SHA:0:7}"
+            VERSION="${GITHUB_REF_NAME}-${SHORT}"
+          fi
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -50,7 +65,11 @@ jobs:
           context: .
           file: Dockerfile.openclaw
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ steps.image.outputs.image }}:latest
+            ${{ steps.image.outputs.image }}:${{ steps.image.outputs.version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

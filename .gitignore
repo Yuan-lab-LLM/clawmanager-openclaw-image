@@ -1,0 +1,2 @@
+# 仅忽略仓库根目录的本地 OpenClaw 配置副本（勿用 .openclaw/，否则会误忽略 defaults-template/.openclaw）
+/.openclaw/

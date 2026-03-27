@@ -1,0 +1,2 @@
+# Linux init scripts must use LF (CRLF breaks bash in /custom-cont-init.d)
+scripts/** text eol=lf

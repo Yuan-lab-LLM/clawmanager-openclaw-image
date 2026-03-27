@@ -1,0 +1,26 @@
+FROM lscr.io/linuxserver/webtop:ubuntu-xfce
+
+ENV PUID=1000
+ENV PGID=1000
+ENV TZ=Asia/Shanghai
+
+LABEL shm_size="1gb"
+
+EXPOSE 3000 3001
+
+RUN apt-get update \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+  && curl -fsSL https://deb.nodesource.com/setup_current.x | bash - \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs \
+  && npm config set registry https://registry.npmmirror.com \
+  && npm install -g openclaw@latest \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY defaults-template/.openclaw /defaults/.openclaw
+COPY scripts/99-openclaw-sync /custom-cont-init.d/99-openclaw-sync
+RUN sed -i 's/\r$//' /custom-cont-init.d/99-openclaw-sync \
+  && chmod +x /custom-cont-init.d/99-openclaw-sync \
+  && chown -R abc:abc /defaults/.openclaw

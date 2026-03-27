@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# Path Definitions
+CONFIG_FILE="/config/.openclaw/openclaw.json"
+DEFAULT_SOURCE="/defaults/.openclaw"
+
+# 1. Initial Sync from Defaults
+if [ ! -d "/config/.openclaw" ] || [ ! -f "$CONFIG_FILE" ]; then
+    echo "[OpenClaw] Syncing config from defaults..."
+    mkdir -p /config/.openclaw
+    cp -rp "$DEFAULT_SOURCE/." /config/.openclaw/
+fi
+
+# 2. Dynamic Environment Injection
+echo "[OpenClaw] Starting environment injection..."
+
+# --- Base URL ---
+if [ -n "$CLAWMANAGER_LLM_BASE_URL" ]; then
+    echo "-> Injecting Base URL..."
+    sed -i "s@\"baseUrl\":[[:space:]]*\"[^\"]*\"@\"baseUrl\": \"$CLAWMANAGER_LLM_BASE_URL\"@g" "$CONFIG_FILE"
+fi
+
+# --- API Key ---
+if [ -n "$CLAWMANAGER_LLM_API_KEY" ]; then
+    echo "-> Injecting API Key..."
+    sed -i "s@\"apiKey\":[[:space:]]*\"[^\"]*\"@\"apiKey\": \"$CLAWMANAGER_LLM_API_KEY\"@g" "$CONFIG_FILE"
+fi
+
+# --- Model ID (Full Replace with auto/ preservation) ---
+if [ -n "$CLAWMANAGER_LLM_MODEL" ]; then
+    echo "-> Injecting Model ID: $CLAWMANAGER_LLM_MODEL"
+
+    # A. Replace "id": "xxx"
+    sed -i "s@\"id\":[[:space:]]*\"[^\"]*\"@\"id\": \"$CLAWMANAGER_LLM_MODEL\"@g" "$CONFIG_FILE"
+
+    # B. Replace "primary": "auto/xxx" (Preserves auto/)
+    sed -i "s@\"primary\":[[:space:]]*\"auto/[^\"]*\"@\"primary\": \"auto/$CLAWMANAGER_LLM_MODEL\"@g" "$CONFIG_FILE"
+
+    # C. Replace Key-style "auto/xxx": {} (Preserves auto/)
+    sed -i "s@\"auto/[^\"]*\":[[:space:]]*{}@\"auto/$CLAWMANAGER_LLM_MODEL\": {}@g" "$CONFIG_FILE"
+fi
+
+# 3. Final Permissions Check
+chown -R abc:abc /config/.openclaw
+echo "[OpenClaw] All tasks completed."

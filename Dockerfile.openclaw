@@ -20,7 +20,9 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY defaults-template/.openclaw /defaults/.openclaw
+COPY defaults-template/.config /defaults/.config
 COPY scripts/99-openclaw-sync /custom-cont-init.d/99-openclaw-sync
 RUN sed -i 's/\r$//' /custom-cont-init.d/99-openclaw-sync \
   && chmod +x /custom-cont-init.d/99-openclaw-sync \
-  && chown -R abc:abc /defaults/.openclaw
+  && chown -R abc:abc /defaults/.openclaw \
+  && chown -R abc:abc /defaults/.config

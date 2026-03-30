@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=OpenClaw Gateway
+Comment=Login autostart: same as running openclaw gateway run in a terminal
+Exec=/usr/bin/bash -lc "exec openclaw gateway run"
+Icon=utilities-terminal
+Terminal=true
+StartupNotify=false

@@ -3,12 +3,29 @@
 # Path Definitions
 CONFIG_FILE="/config/.openclaw/openclaw.json"
 DEFAULT_SOURCE="/defaults/.openclaw"
+AUTOSTART_DIR="/config/.config/autostart"
+AUTOSTART_DEFAULT="/defaults/.config/autostart"
 
 # 1. Initial Sync from Defaults
 if [ ! -d "/config/.openclaw" ] || [ ! -f "$CONFIG_FILE" ]; then
     echo "[OpenClaw] Syncing config from defaults..."
     mkdir -p /config/.openclaw
     cp -rp "$DEFAULT_SOURCE/." /config/.openclaw/
+fi
+
+# 1b. XFCE login autostart: install missing *.desktop from image (once per file; /config is abc's $HOME)
+if [ -d "$AUTOSTART_DEFAULT" ]; then
+    for f in "$AUTOSTART_DEFAULT"/*.desktop; do
+        [ -f "$f" ] || continue
+        base=$(basename "$f")
+        dest="$AUTOSTART_DIR/$base"
+        if [ ! -f "$dest" ]; then
+            echo "[OpenClaw] Installing XFCE autostart: $base"
+            mkdir -p "$AUTOSTART_DIR"
+            cp -f "$f" "$dest"
+            chown abc:abc "$dest"
+        fi
+    done
 fi
 
 # 2. Dynamic Environment Injection

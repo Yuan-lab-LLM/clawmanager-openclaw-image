@@ -1,7 +1,7 @@
 # 构建 Dockerfile.openclaw 并推送到 GitHub Container Registry (ghcr.io)
 # 镜像名：ghcr.io/<owner>/openclaw
 # 每次推送两个标签：latest + 版本标签。版本优先级：
-#   workflow_dispatch 的 version_tag > git 标签 v* > 仓库根目录 VERSION 文件首行 > 分支名-短 SHA
+#   workflow_dispatch 的 version_tag > git 标签 v* > 仓库根目录 VERSION 文件末条非注释非空行 > 分支名-短 SHA
 
 name: Build and push to GHCR
 
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       version_tag:
-        description: "镜像版本标签（不含 openclaw:），例如 v2026.3.24；留空则同 push：读 VERSION 文件或分支-短 SHA"
+        description: "镜像版本标签（不含 openclaw:），例如 v2026.3.24；留空则同 push：读 VERSION 末行或分支-短 SHA"
         required: false
         type: string
 
@@ -54,7 +54,7 @@ jobs:
           elif [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME}"
           elif [ -f VERSION ]; then
-            VERSION_LINE="$(grep -v '^[[:space:]]*#' VERSION | head -n1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+            VERSION_LINE="$(grep -v '^[[:space:]]*#' VERSION | sed '/^[[:space:]]*$/d' | tail -n1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
             if [ -n "${VERSION_LINE}" ]; then
               VERSION="${VERSION_LINE}"
             else

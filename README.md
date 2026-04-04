@@ -12,6 +12,8 @@
 
 This guide helps you build an **OpenClaw** base image for the **ClawManager** control plane, with **automated config injection** (API Key, Base URL, etc.) and **persistent directory layout** for multi-tenant scenarios.
 
+The image now also includes an **OpenClaw Agent** service inside the container. It auto-registers to ClawManager, sends heartbeats, polls commands, manages the OpenClaw process, and exposes a local Gin-based health endpoint.
+
 **Prefer `Dockerfile.openclaw` for a one-shot build.** If you need to install components manually inside the WebTop desktop and then `docker commit`, see **Advanced: manual flow** below.
 
 
@@ -73,6 +75,13 @@ Set these in ClawManager or `docker run` to inject into `openclaw.json`:
 | `CLAWMANAGER_LLM_API_KEY`  | `apiKey`                               | Model API key                                                                             |
 | `CLAWMANAGER_LLM_MODEL`    | `primary` / `agents.defaults.models` | Model id replacement;`auto/` handling matches the `sed` logic in `99-openclaw-sync` |
 | `CLAWMANAGER_OPENCLAW_CHANNELS_JSON` | `channels` (merge)                     | JSON object with one or more channel keys (`feishu`, `slack`, …); shallow-merge into `channels`; invalid JSON aborts startup |
+| `OPENCLAW_AGENT_INSTANCE_ID` | agent bootstrap                         | Required. Unique instance id used during `/api/v1/agent/register` |
+| `OPENCLAW_AGENT_BOOTSTRAP_TOKEN` | agent bootstrap                      | Required. Bootstrap token for agent registration |
+| `OPENCLAW_AGENT_CONTROL_PLANE_BASE_URL` | agent bootstrap             | Required. ClawManager base URL |
+| `OPENCLAW_AGENT_INITIAL_CONFIG_REVISION_ID` | agent bootstrap      | Optional initial revision id |
+| `OPENCLAW_AGENT_OPENCLAW_COMMAND` | process management              | Optional. Defaults to `openclaw gateway` |
+
+The agent default config is stored at `/etc/openclaw-agent/config.yaml`, seeded from `/defaults/openclaw-agent/config.yaml`, and the local health/debug server listens on `:18080` by default.
 
 ---
 

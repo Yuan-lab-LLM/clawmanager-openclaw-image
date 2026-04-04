@@ -1,0 +1,5 @@
+.git
+.gocache
+.gomodcache
+openclaw-agent
+dist/node-v22.17.0-linux-x64.tar.xz

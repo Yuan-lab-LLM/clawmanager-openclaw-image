@@ -5,6 +5,7 @@ CONFIG_FILE="/config/.openclaw/openclaw.json"
 DEFAULT_SOURCE="/defaults/.openclaw"
 AUTOSTART_DIR="/config/.config/autostart"
 AUTOSTART_DEFAULT="/defaults/.config/autostart"
+AGENT_GATEWAY_AUTOSTART="$AUTOSTART_DIR/openclaw-gateway.desktop"
 
 # 1. Initial Sync from Defaults
 if [ ! -d "/config/.openclaw" ] || [ ! -f "$CONFIG_FILE" ]; then
@@ -13,11 +14,21 @@ if [ ! -d "/config/.openclaw" ] || [ ! -f "$CONFIG_FILE" ]; then
     cp -rp "$DEFAULT_SOURCE/." /config/.openclaw/
 fi
 
-# 1b. XFCE login autostart: install missing *.desktop from image (once per file; /config is abc's $HOME)
+# 1b. XFCE login autostart: when agent mode is enabled, the agent must be the only
+# process manager for openclaw, so remove the legacy desktop autostart entry.
+if [ "${CLAWMANAGER_AGENT_ENABLED:-}" = "true" ] && [ -f "$AGENT_GATEWAY_AUTOSTART" ]; then
+    echo "[OpenClaw] Removing legacy XFCE gateway autostart because agent mode is enabled"
+    rm -f "$AGENT_GATEWAY_AUTOSTART"
+fi
+
+# 1c. XFCE login autostart: install missing *.desktop from image (once per file; /config is abc's $HOME)
 if [ -d "$AUTOSTART_DEFAULT" ]; then
     for f in "$AUTOSTART_DEFAULT"/*.desktop; do
         [ -f "$f" ] || continue
         base=$(basename "$f")
+        if [ "${CLAWMANAGER_AGENT_ENABLED:-}" = "true" ] && [ "$base" = "openclaw-gateway.desktop" ]; then
+            continue
+        fi
         dest="$AUTOSTART_DIR/$base"
         if [ ! -f "$dest" ]; then
             echo "[OpenClaw] Installing XFCE autostart: $base"

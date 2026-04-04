@@ -1,3 +1,19 @@
+FROM golang:1.26-bookworm AS agent-builder
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY cmd ./cmd
+COPY internal ./internal
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/openclaw-agent ./cmd/openclaw-agent
+
+
+FROM node:22-bookworm-slim AS node-runtime
+
+
 FROM lscr.io/linuxserver/webtop:ubuntu-xfce
 
 ENV PUID=1000
@@ -11,18 +27,27 @@ EXPOSE 3000 3001
 RUN apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     ca-certificates \
-    curl \
-    gnupg \
-  && curl -fsSL https://deb.nodesource.com/setup_current.x | bash - \
-  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nodejs \
-  && npm config set registry https://registry.npmmirror.com \
-  && npm install -g openclaw@latest \
   && rm -rf /var/lib/apt/lists/*
+
+COPY --from=node-runtime /usr/local /usr/local
+
+RUN npm install -g openclaw@latest
 
 COPY defaults-template/.openclaw /defaults/.openclaw
 COPY defaults-template/.config /defaults/.config
+COPY config/openclaw-agent /defaults/openclaw-agent
 COPY scripts/99-openclaw-sync /custom-cont-init.d/99-openclaw-sync
+COPY --from=agent-builder /out/openclaw-agent /usr/local/bin/openclaw-agent
+COPY scripts/openclaw-agent-run /etc/services.d/openclaw-agent/run
+COPY scripts/openclaw-agent-finish /etc/services.d/openclaw-agent/finish
+
 RUN sed -i 's/\r$//' /custom-cont-init.d/99-openclaw-sync \
+  && sed -i 's/\r$//' /etc/services.d/openclaw-agent/run \
+  && sed -i 's/\r$//' /etc/services.d/openclaw-agent/finish \
   && chmod +x /custom-cont-init.d/99-openclaw-sync \
+  && chmod +x /etc/services.d/openclaw-agent/run \
+  && chmod +x /etc/services.d/openclaw-agent/finish \
+  && chmod +x /usr/local/bin/openclaw-agent \
   && chown -R abc:abc /defaults/.openclaw \
-  && chown -R abc:abc /defaults/.config
+  && chown -R abc:abc /defaults/.config \
+  && mkdir -p /var/lib/openclaw-agent /var/log/openclaw-agent /etc/openclaw-agent

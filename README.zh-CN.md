@@ -12,6 +12,8 @@
 
 本指南帮助您为 **ClawManager** 控制面构建 **OpenClaw** 基础镜像，支持 **自动化配置注入**（API Key、Base URL 等）与多租户场景下的 **持久化目录布局**。
 
+镜像现在也内置了 **OpenClaw Agent** 服务。它会在容器内自动启动，负责向 ClawManager 注册、发送心跳、轮询命令、托管 OpenClaw 进程，并提供基于 Gin 的本地健康检查接口。
+
 **推荐优先使用 `Dockerfile.openclaw` 一键构建。** 若需在 WebTop 桌面内手动安装组件后再执行 `docker commit`，请见下文 **进阶：基础流程（手动 / docker commit）**。
 
 
@@ -73,6 +75,13 @@ docker run -d \
 | `CLAWMANAGER_LLM_API_KEY`  | `apiKey`                               | 模型 API 密钥                                                             |
 | `CLAWMANAGER_LLM_MODEL`    | `primary` / `agents.defaults.models` | 模型 ID 替换；`auto/` 的处理与 `99-openclaw-sync` 中 `sed` 逻辑一致 |
 | `CLAWMANAGER_OPENCLAW_CHANNELS_JSON` | `channels`（合并）                     | JSON 对象，可含一个或多个通道键（`feishu`、`slack` 等）；与已有 `channels` 做浅合并；解析失败时容器初始化失败 |
+| `OPENCLAW_AGENT_INSTANCE_ID` | agent 启动参数                           | 必填。实例唯一 ID，用于 `/api/v1/agent/register` |
+| `OPENCLAW_AGENT_BOOTSTRAP_TOKEN` | agent 启动参数                      | 必填。agent 注册使用的 bootstrap token |
+| `OPENCLAW_AGENT_CONTROL_PLANE_BASE_URL` | agent 启动参数             | 必填。ClawManager 基础地址 |
+| `OPENCLAW_AGENT_INITIAL_CONFIG_REVISION_ID` | agent 启动参数      | 可选。初始配置 revision id |
+| `OPENCLAW_AGENT_OPENCLAW_COMMAND` | 进程托管参数                  | 可选。默认是 `openclaw gateway` |
+
+agent 默认配置位于 `/etc/openclaw-agent/config.yaml`，初次启动时由 `/defaults/openclaw-agent/config.yaml` 填充；本地健康与调试接口默认监听 `:18080`。
 
 ---
 

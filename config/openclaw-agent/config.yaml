@@ -12,6 +12,7 @@ openclaw_command:
   - run
 openclaw_config_path: /config/.openclaw/openclaw.json
 openclaw_workspace_path: /config/.openclaw/workspace
+openclaw_skills_path: /config/.openclaw/workspace/skills
 openclaw_health_url: http://127.0.0.1:18789/health
 heartbeat_interval: 15s
 state_report_interval: 45s
@@ -19,4 +20,6 @@ command_poll_interval: 5s
 command_poll_backoff_max: 60s
 register_retry_interval: 10s
 process_stop_timeout: 20s
+skill_incremental_interval: 30s
+skill_full_sync_interval: 12h
 max_auto_restart: 3

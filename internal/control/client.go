@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"path"
@@ -78,10 +79,105 @@ func (c *Client) ReportState(ctx context.Context, req protocol.StateReportReques
 	return c.doJSON(ctx, http.MethodPost, "/api/v1/agent/state/report", req, nil, authSession)
 }
 
+func (c *Client) ReportSkillInventory(ctx context.Context, req protocol.SkillInventoryReportRequest) error {
+	return c.doJSON(ctx, http.MethodPost, "/api/v1/agent/skills/inventory", req, nil, authSession)
+}
+
 func (c *Client) FetchConfigRevision(ctx context.Context, id string) (protocol.ConfigRevisionResponse, error) {
 	var resp protocol.ConfigRevisionResponse
 	err := c.doJSON(ctx, http.MethodGet, path.Join("/api/v1/agent/config/revisions", id), nil, &resp, authSession)
 	return resp, err
+}
+
+func (c *Client) DownloadSkillArchive(ctx context.Context, skillVersion string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path.Join("/api/v1/agent/skills/versions", url.PathEscape(skillVersion), "download"), nil)
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+	req.Header.Set("Accept", "application/octet-stream")
+	token := c.getToken()
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("download skill archive: %w", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 128<<20))
+	if err != nil {
+		return nil, fmt.Errorf("read skill archive: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, HTTPStatusError{Code: resp.StatusCode, Body: string(data)}
+	}
+	return data, nil
+}
+
+func (c *Client) UploadSkillArchive(ctx context.Context, req protocol.SkillUploadRequest, fileName string, file io.Reader) error {
+	pr, pw := io.Pipe()
+	writer := multipart.NewWriter(pw)
+
+	go func() {
+		defer pw.Close()
+		defer writer.Close()
+
+		part, err := writer.CreateFormFile("file", fileName)
+		if err != nil {
+			_ = pw.CloseWithError(fmt.Errorf("create form file: %w", err))
+			return
+		}
+		if _, err := io.Copy(part, file); err != nil {
+			_ = pw.CloseWithError(fmt.Errorf("write archive body: %w", err))
+			return
+		}
+
+		fields := map[string]string{
+			"agent_id":      req.AgentID,
+			"skill_id":      req.SkillID,
+			"skill_version": req.SkillVersion,
+			"identifier":    req.Identifier,
+			"content_md5":   req.ContentMD5,
+			"source":        req.Source,
+		}
+		for key, value := range fields {
+			if strings.TrimSpace(value) == "" {
+				continue
+			}
+			if err := writer.WriteField(key, value); err != nil {
+				_ = pw.CloseWithError(fmt.Errorf("write field %s: %w", key, err))
+				return
+			}
+		}
+	}()
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/v1/agent/skills/upload", pr)
+	if err != nil {
+		return fmt.Errorf("new request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", writer.FormDataContentType())
+	httpReq.Header.Set("Accept", "application/json")
+	token := c.getToken()
+	if token != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("upload skill archive: %w", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return fmt.Errorf("read upload response: %w", err)
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return HTTPStatusError{Code: resp.StatusCode, Body: string(data)}
+	}
+	return nil
 }
 
 type authMode int

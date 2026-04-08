@@ -12,6 +12,7 @@ import (
 	"github.com/iamlovingit/clawmanager-openclaw-image/internal/process"
 	"github.com/iamlovingit/clawmanager-openclaw-image/internal/profiler"
 	"github.com/iamlovingit/clawmanager-openclaw-image/internal/protocol"
+	"github.com/iamlovingit/clawmanager-openclaw-image/internal/skills"
 	"github.com/iamlovingit/clawmanager-openclaw-image/internal/store"
 )
 
@@ -25,16 +26,18 @@ type Executor struct {
 	process  *process.Manager
 	profiler *profiler.Profiler
 	config   *configmanager.Manager
+	skills   *skills.Manager
 	store    *store.Store
 	mu       sync.Mutex
 }
 
-func New(client lifecycleClient, processManager *process.Manager, profilerInstance *profiler.Profiler, configManager *configmanager.Manager, st *store.Store) *Executor {
+func New(client lifecycleClient, processManager *process.Manager, profilerInstance *profiler.Profiler, configManager *configmanager.Manager, skillManager *skills.Manager, st *store.Store) *Executor {
 	return &Executor{
 		client:   client,
 		process:  processManager,
 		profiler: profilerInstance,
 		config:   configManager,
+		skills:   skillManager,
 		store:    st,
 	}
 }
@@ -141,8 +144,94 @@ func (e *Executor) handle(ctx context.Context, cmd *protocol.Command) (map[strin
 			"pid":    snapshot.PID,
 			"uptime": snapshot.Uptime.String(),
 		}, nil
+	case "install_skill":
+		result, err := e.skills.Install(ctx, cmd.Payload)
+		if err != nil {
+			return result, err
+		}
+		syncResult, syncErr := e.skills.Sync(ctx, "incremental", "command_install_skill", true)
+		if syncResult != nil {
+			result["inventory_sync"] = syncResult
+		}
+		return result, syncErr
+	case "update_skill":
+		result, err := e.skills.Install(ctx, cmd.Payload)
+		if err != nil {
+			return result, err
+		}
+		syncResult, syncErr := e.skills.Sync(ctx, "incremental", "command_update_skill", true)
+		if syncResult != nil {
+			result["inventory_sync"] = syncResult
+		}
+		return result, syncErr
+	case "uninstall_skill", "remove_skill":
+		result, err := e.skills.Uninstall(cmd.Payload)
+		if err != nil {
+			return result, err
+		}
+		syncResult, syncErr := e.skills.Sync(ctx, "incremental", "command_uninstall_skill", true)
+		if syncResult != nil {
+			result["inventory_sync"] = syncResult
+		}
+		return result, syncErr
+	case "disable_skill", "quarantine_skill":
+		result, err := e.skills.Disable(cmd.Payload)
+		if err != nil {
+			return result, err
+		}
+		syncResult, syncErr := e.skills.Sync(ctx, "incremental", "command_disable_skill", true)
+		if syncResult != nil {
+			result["inventory_sync"] = syncResult
+		}
+		return result, syncErr
+	case "sync_skill_inventory":
+		mode := "incremental"
+		if full, _ := cmd.Payload["full"].(bool); full {
+			mode = "full"
+		}
+		return e.skills.Sync(ctx, mode, "command_sync_skill_inventory", true)
+	case "handle_skill_risk":
+		result, err := e.handleSkillRisk(ctx, cmd.Payload)
+		if err != nil {
+			return result, err
+		}
+		syncResult, syncErr := e.skills.Sync(ctx, "incremental", "command_handle_skill_risk", true)
+		if syncResult != nil {
+			result["inventory_sync"] = syncResult
+		}
+		return result, syncErr
+	case "collect_skill_package":
+		return e.skills.CollectPackage(ctx, cmd.Payload)
 	default:
 		return nil, fmt.Errorf("unsupported command type %q", cmd.Type)
+	}
+}
+
+func (e *Executor) handleSkillRisk(ctx context.Context, payload map[string]any) (map[string]any, error) {
+	action := payloadString(payload, "action", "risk_action")
+	switch action {
+	case "disable", "quarantine":
+		result, err := e.skills.Disable(payload)
+		if result == nil {
+			result = map[string]any{}
+		}
+		result["risk_action"] = action
+		return result, err
+	case "remove", "uninstall":
+		result, err := e.skills.Uninstall(payload)
+		if result == nil {
+			result = map[string]any{}
+		}
+		result["risk_action"] = action
+		return result, err
+	case "stop_instance", "shutdown":
+		err := e.process.Stop(ctx)
+		return map[string]any{
+			"risk_action": action,
+			"status":      e.process.Snapshot().Status,
+		}, err
+	default:
+		return nil, fmt.Errorf("unsupported skill risk action %q", action)
 	}
 }
 
@@ -152,6 +241,24 @@ func revisionIDFromPayload(payload map[string]any) string {
 	}
 	if value, ok := payload["revision_id"].(float64); ok {
 		return strconv.Itoa(int(value))
+	}
+	return ""
+}
+
+func payloadString(payload map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value, ok := payload[key]
+		if !ok {
+			continue
+		}
+		switch v := value.(type) {
+		case string:
+			if v != "" {
+				return v
+			}
+		case float64:
+			return strconv.Itoa(int(v))
+		}
 	}
 	return ""
 }

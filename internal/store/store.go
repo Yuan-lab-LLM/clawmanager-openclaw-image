@@ -11,16 +11,31 @@ import (
 )
 
 type State struct {
-	AgentID                    string         `json:"agent_id"`
-	SessionToken               string         `json:"session_token"`
-	SessionExpiresAt           time.Time      `json:"session_expires_at"`
-	LastRegisterTime           time.Time      `json:"last_register_time"`
-	CurrentConfigRevisionID    string         `json:"current_config_revision_id"`
-	LastGoodConfigRevisionID   string         `json:"last_good_config_revision_id"`
-	LastApplyAttemptRevisionID string         `json:"last_apply_attempt_revision_id"`
-	LastApplyTime              time.Time      `json:"last_apply_time"`
-	LastCommandExecutionCache  map[string]any `json:"last_command_execution_cache"`
-	PendingEventQueue          []any          `json:"pending_event_queue"`
+	AgentID                    string                        `json:"agent_id"`
+	SessionToken               string                        `json:"session_token"`
+	SessionExpiresAt           time.Time                     `json:"session_expires_at"`
+	LastRegisterTime           time.Time                     `json:"last_register_time"`
+	CurrentConfigRevisionID    string                        `json:"current_config_revision_id"`
+	LastGoodConfigRevisionID   string                        `json:"last_good_config_revision_id"`
+	LastApplyAttemptRevisionID string                        `json:"last_apply_attempt_revision_id"`
+	LastApplyTime              time.Time                     `json:"last_apply_time"`
+	LastCommandExecutionCache  map[string]any                `json:"last_command_execution_cache"`
+	PendingEventQueue          []any                         `json:"pending_event_queue"`
+	ManagedSkills              map[string]ManagedSkillRecord `json:"managed_skills"`
+	LastSkillInventoryDigest   string                        `json:"last_skill_inventory_digest"`
+	LastSkillFullSyncAt        time.Time                     `json:"last_skill_full_sync_at"`
+	LastSkillIncrementalSyncAt time.Time                     `json:"last_skill_incremental_sync_at"`
+}
+
+type ManagedSkillRecord struct {
+	SkillID      string    `json:"skill_id,omitempty"`
+	SkillVersion string    `json:"skill_version,omitempty"`
+	InstallPath  string    `json:"install_path"`
+	ContentMD5   string    `json:"content_md5,omitempty"`
+	Source       string    `json:"source,omitempty"`
+	Status       string    `json:"status,omitempty"`
+	InstalledAt  time.Time `json:"installed_at,omitempty"`
+	UpdatedAt    time.Time `json:"updated_at,omitempty"`
 }
 
 type Store struct {
@@ -38,6 +53,7 @@ func New(dir string) (*Store, error) {
 		state: State{
 			LastCommandExecutionCache: map[string]any{},
 			PendingEventQueue:         []any{},
+			ManagedSkills:             map[string]ManagedSkillRecord{},
 		},
 	}
 	if err := s.load(); err != nil {
@@ -65,6 +81,9 @@ func (s *Store) load() error {
 	}
 	if s.state.PendingEventQueue == nil {
 		s.state.PendingEventQueue = []any{}
+	}
+	if s.state.ManagedSkills == nil {
+		s.state.ManagedSkills = map[string]ManagedSkillRecord{}
 	}
 	return nil
 }

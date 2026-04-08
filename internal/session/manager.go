@@ -45,7 +45,7 @@ func (m *Manager) Ensure(ctx context.Context) (store.State, error) {
 		AgentID:         agentID,
 		AgentVersion:    protocol.AgentVersion,
 		ProtocolVersion: m.cfg.ProtocolVersion,
-		Capabilities:    []string{"heartbeat", "state-report", "command-execution", "config-apply", "process-management", "local-debug-http"},
+		Capabilities:    []string{"heartbeat", "state-report", "skill-inventory", "skill-installation", "skill-risk-control", "command-execution", "config-apply", "process-management", "local-debug-http"},
 		HostInfo:        collectHostInfo(),
 	})
 	if err != nil {

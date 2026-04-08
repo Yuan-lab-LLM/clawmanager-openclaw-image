@@ -21,6 +21,7 @@ import (
 	"github.com/iamlovingit/clawmanager-openclaw-image/internal/profiler"
 	"github.com/iamlovingit/clawmanager-openclaw-image/internal/protocol"
 	"github.com/iamlovingit/clawmanager-openclaw-image/internal/session"
+	"github.com/iamlovingit/clawmanager-openclaw-image/internal/skills"
 	"github.com/iamlovingit/clawmanager-openclaw-image/internal/store"
 )
 
@@ -33,6 +34,7 @@ type Supervisor struct {
 	client    *control.Client
 	session   *session.Manager
 	config    *configmanager.Manager
+	skills    *skills.Manager
 	executor  *command.Executor
 	http      *httpserver.Server
 	logger    *log.Logger
@@ -62,10 +64,11 @@ func New(cfg appconfig.Config) (*Supervisor, error) {
 	})
 	proc := process.New(cfg)
 	prof := profiler.New(cfg)
-	inspector := openclawinspector.New(cfg.OpenClawConfigPath, cfg.OpenClawWorkspacePath)
+	inspector := openclawinspector.New(cfg.OpenClawConfigPath, cfg.OpenClawWorkspacePath, cfg.OpenClawBuiltinSkillsPath)
 	sessionManager := session.New(cfg, client, st)
 	configManager := configmanager.New(cfg, client, st)
-	executor := command.New(client, proc, prof, configManager, st)
+	skillManager := skills.New(cfg, client, st)
+	executor := command.New(client, proc, prof, configManager, skillManager, st)
 	httpServer := httpserver.New(cfg.LocalHTTPBind, proc, prof, inspector, st)
 
 	return &Supervisor{
@@ -77,6 +80,7 @@ func New(cfg appconfig.Config) (*Supervisor, error) {
 		client:    client,
 		session:   sessionManager,
 		config:    configManager,
+		skills:    skillManager,
 		executor:  executor,
 		http:      httpServer,
 		logger:    logger,
@@ -116,7 +120,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		_, _ = s.config.ApplyRevision(ctx, s.cfg.InitialConfigRevisionID)
 	}
 
-	wg.Add(3)
+	wg.Add(4)
 	go func() {
 		defer wg.Done()
 		s.heartbeatLoop(ctx, errCh)
@@ -128,6 +132,10 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	go func() {
 		defer wg.Done()
 		s.commandLoop(ctx, errCh)
+	}()
+	go func() {
+		defer wg.Done()
+		s.skillLoop(ctx, errCh)
 	}()
 
 	select {
@@ -281,10 +289,48 @@ func defaultCapabilities() []string {
 	return []string{
 		"heartbeat",
 		"state-report",
+		"skill-inventory",
+		"skill-installation",
+		"skill-risk-control",
 		"command-execution",
 		"config-apply",
 		"process-management",
 		"local-debug-http",
+	}
+}
+
+func (s *Supervisor) skillLoop(ctx context.Context, errCh chan<- error) {
+	incrementalTicker := time.NewTicker(s.cfg.SkillIncrementalInterval)
+	defer incrementalTicker.Stop()
+
+	fullTicker := time.NewTicker(s.cfg.SkillFullSyncInterval)
+	defer fullTicker.Stop()
+
+	if _, err := s.skills.Sync(ctx, "full", "agent_bootstrap", true); err != nil {
+		s.logger.Printf("initial skill sync failed: %v", err)
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-incrementalTicker.C:
+			if err := s.ensureSession(ctx); err != nil {
+				errCh <- err
+				return
+			}
+			if _, err := s.skills.Sync(ctx, "incremental", "periodic_incremental", false); err != nil {
+				s.logger.Printf("incremental skill sync failed: %v", err)
+			}
+		case <-fullTicker.C:
+			if err := s.ensureSession(ctx); err != nil {
+				errCh <- err
+				return
+			}
+			if _, err := s.skills.Sync(ctx, "full", "periodic_full", true); err != nil {
+				s.logger.Printf("full skill sync failed: %v", err)
+			}
+		}
 	}
 }
 

@@ -17,53 +17,63 @@ const (
 )
 
 type Config struct {
-	InstanceID               string        `yaml:"instance_id"`
-	BootstrapToken           string        `yaml:"bootstrap_token"`
-	ControlPlaneBaseURL      string        `yaml:"control_plane_base_url"`
-	AgentDataDir             string        `yaml:"agent_data_dir"`
-	DiskUsagePath            string        `yaml:"disk_usage_path"`
-	DiskLimitBytes           uint64        `yaml:"disk_limit_bytes"`
-	InitialConfigRevisionID  string        `yaml:"initial_config_revision_id"`
-	ProtocolVersion          string        `yaml:"protocol_version"`
-	LocalHTTPBind            string        `yaml:"local_http_bind"`
-	LogFilePath              string        `yaml:"log_file_path"`
-	OpenClawCommand          []string      `yaml:"openclaw_command"`
-	OpenClawConfigPath       string        `yaml:"openclaw_config_path"`
-	OpenClawWorkspacePath    string        `yaml:"openclaw_workspace_path"`
-	OpenClawHealthURL        string        `yaml:"openclaw_health_url"`
-	HeartbeatInterval        time.Duration `yaml:"-"`
-	StateReportInterval      time.Duration `yaml:"-"`
-	CommandPollInterval      time.Duration `yaml:"-"`
-	CommandPollBackoffMax    time.Duration `yaml:"-"`
-	RegisterRetryInterval    time.Duration `yaml:"-"`
-	ProcessStopTimeout       time.Duration `yaml:"-"`
-	MaxAutoRestart           int           `yaml:"max_auto_restart"`
-	HeartbeatIntervalRaw     string        `yaml:"heartbeat_interval"`
-	StateReportIntervalRaw   string        `yaml:"state_report_interval"`
-	CommandPollIntervalRaw   string        `yaml:"command_poll_interval"`
-	CommandPollBackoffMaxRaw string        `yaml:"command_poll_backoff_max"`
-	RegisterRetryIntervalRaw string        `yaml:"register_retry_interval"`
-	ProcessStopTimeoutRaw    string        `yaml:"process_stop_timeout"`
+	InstanceID                string        `yaml:"instance_id"`
+	BootstrapToken            string        `yaml:"bootstrap_token"`
+	ControlPlaneBaseURL       string        `yaml:"control_plane_base_url"`
+	AgentDataDir              string        `yaml:"agent_data_dir"`
+	DiskUsagePath             string        `yaml:"disk_usage_path"`
+	DiskLimitBytes            uint64        `yaml:"disk_limit_bytes"`
+	InitialConfigRevisionID   string        `yaml:"initial_config_revision_id"`
+	ProtocolVersion           string        `yaml:"protocol_version"`
+	LocalHTTPBind             string        `yaml:"local_http_bind"`
+	LogFilePath               string        `yaml:"log_file_path"`
+	OpenClawCommand           []string      `yaml:"openclaw_command"`
+	OpenClawConfigPath        string        `yaml:"openclaw_config_path"`
+	OpenClawWorkspacePath     string        `yaml:"openclaw_workspace_path"`
+	OpenClawSkillsPath        string        `yaml:"openclaw_skills_path"`
+	OpenClawBuiltinSkillsPath string        `yaml:"openclaw_builtin_skills_path"`
+	OpenClawHealthURL         string        `yaml:"openclaw_health_url"`
+	HeartbeatInterval         time.Duration `yaml:"-"`
+	StateReportInterval       time.Duration `yaml:"-"`
+	CommandPollInterval       time.Duration `yaml:"-"`
+	CommandPollBackoffMax     time.Duration `yaml:"-"`
+	RegisterRetryInterval     time.Duration `yaml:"-"`
+	ProcessStopTimeout        time.Duration `yaml:"-"`
+	SkillIncrementalInterval  time.Duration `yaml:"-"`
+	SkillFullSyncInterval     time.Duration `yaml:"-"`
+	MaxAutoRestart            int           `yaml:"max_auto_restart"`
+	HeartbeatIntervalRaw      string        `yaml:"heartbeat_interval"`
+	StateReportIntervalRaw    string        `yaml:"state_report_interval"`
+	CommandPollIntervalRaw    string        `yaml:"command_poll_interval"`
+	CommandPollBackoffMaxRaw  string        `yaml:"command_poll_backoff_max"`
+	RegisterRetryIntervalRaw  string        `yaml:"register_retry_interval"`
+	ProcessStopTimeoutRaw     string        `yaml:"process_stop_timeout"`
+	SkillIncrementalRaw       string        `yaml:"skill_incremental_interval"`
+	SkillFullSyncRaw          string        `yaml:"skill_full_sync_interval"`
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		AgentDataDir:             "/var/lib/openclaw-agent",
-		DiskUsagePath:            "/config",
-		ProtocolVersion:          "v1",
-		LocalHTTPBind:            "0.0.0.0:18080",
-		LogFilePath:              "/var/log/openclaw-agent/agent.log",
-		OpenClawCommand:          []string{"openclaw", "gateway", "run"},
-		OpenClawConfigPath:       "/config/.openclaw/openclaw.json",
-		OpenClawWorkspacePath:    "/config/.openclaw/workspace",
-		OpenClawHealthURL:        "http://127.0.0.1:18789/health",
-		HeartbeatIntervalRaw:     "15s",
-		StateReportIntervalRaw:   "45s",
-		CommandPollIntervalRaw:   "5s",
-		CommandPollBackoffMaxRaw: "60s",
-		RegisterRetryIntervalRaw: "10s",
-		ProcessStopTimeoutRaw:    "20s",
-		MaxAutoRestart:           3,
+		AgentDataDir:              "/var/lib/openclaw-agent",
+		DiskUsagePath:             "/config",
+		ProtocolVersion:           "v1",
+		LocalHTTPBind:             "0.0.0.0:18080",
+		LogFilePath:               "/var/log/openclaw-agent/agent.log",
+		OpenClawCommand:           []string{"openclaw", "gateway", "run"},
+		OpenClawConfigPath:        "/config/.openclaw/openclaw.json",
+		OpenClawWorkspacePath:     "/config/.openclaw/workspace",
+		OpenClawSkillsPath:        "/config/.openclaw/workspace/skills",
+		OpenClawBuiltinSkillsPath: "/usr/lib/node_modules/openclaw/skills",
+		OpenClawHealthURL:         "http://127.0.0.1:18789/health",
+		HeartbeatIntervalRaw:      "15s",
+		StateReportIntervalRaw:    "45s",
+		CommandPollIntervalRaw:    "5s",
+		CommandPollBackoffMaxRaw:  "60s",
+		RegisterRetryIntervalRaw:  "10s",
+		ProcessStopTimeoutRaw:     "20s",
+		SkillIncrementalRaw:       "30s",
+		SkillFullSyncRaw:          "12h",
+		MaxAutoRestart:            3,
 	}
 
 	path := envOrDefault("OPENCLAW_AGENT_CONFIG_PATH", defaultConfigPath)
@@ -86,6 +96,8 @@ func Load() (Config, error) {
 	overrideStringAny(&cfg.LogFilePath, "OPENCLAW_AGENT_LOG_FILE_PATH")
 	overrideStringAny(&cfg.OpenClawConfigPath, "OPENCLAW_AGENT_OPENCLAW_CONFIG_PATH")
 	overrideStringAny(&cfg.OpenClawWorkspacePath, "OPENCLAW_AGENT_OPENCLAW_WORKSPACE_PATH")
+	overrideStringAny(&cfg.OpenClawSkillsPath, "OPENCLAW_AGENT_OPENCLAW_SKILLS_PATH")
+	overrideStringAny(&cfg.OpenClawBuiltinSkillsPath, "OPENCLAW_AGENT_OPENCLAW_BUILTIN_SKILLS_PATH")
 	overrideStringAny(&cfg.OpenClawHealthURL, "OPENCLAW_AGENT_OPENCLAW_HEALTH_URL")
 	overrideStringAny(&cfg.HeartbeatIntervalRaw, "OPENCLAW_AGENT_HEARTBEAT_INTERVAL")
 	overrideStringAny(&cfg.StateReportIntervalRaw, "OPENCLAW_AGENT_STATE_REPORT_INTERVAL")
@@ -93,6 +105,8 @@ func Load() (Config, error) {
 	overrideStringAny(&cfg.CommandPollBackoffMaxRaw, "OPENCLAW_AGENT_COMMAND_POLL_BACKOFF_MAX")
 	overrideStringAny(&cfg.RegisterRetryIntervalRaw, "OPENCLAW_AGENT_REGISTER_RETRY_INTERVAL")
 	overrideStringAny(&cfg.ProcessStopTimeoutRaw, "OPENCLAW_AGENT_PROCESS_STOP_TIMEOUT")
+	overrideStringAny(&cfg.SkillIncrementalRaw, "OPENCLAW_AGENT_SKILL_INCREMENTAL_INTERVAL")
+	overrideStringAny(&cfg.SkillFullSyncRaw, "OPENCLAW_AGENT_SKILL_FULL_SYNC_INTERVAL")
 
 	if raw := envFirst("OPENCLAW_AGENT_OPENCLAW_COMMAND"); raw != "" {
 		cfg.OpenClawCommand = strings.Fields(raw)
@@ -131,6 +145,12 @@ func Load() (Config, error) {
 	if cfg.ProcessStopTimeout, err = time.ParseDuration(cfg.ProcessStopTimeoutRaw); err != nil {
 		return Config{}, fmt.Errorf("parse process_stop_timeout: %w", err)
 	}
+	if cfg.SkillIncrementalInterval, err = time.ParseDuration(cfg.SkillIncrementalRaw); err != nil {
+		return Config{}, fmt.Errorf("parse skill_incremental_interval: %w", err)
+	}
+	if cfg.SkillFullSyncInterval, err = time.ParseDuration(cfg.SkillFullSyncRaw); err != nil {
+		return Config{}, fmt.Errorf("parse skill_full_sync_interval: %w", err)
+	}
 
 	if cfg.InstanceID == "" {
 		return Config{}, errors.New("instance_id is required")
@@ -149,6 +169,8 @@ func Load() (Config, error) {
 	cfg.DiskUsagePath = filepath.Clean(cfg.DiskUsagePath)
 	cfg.OpenClawConfigPath = filepath.Clean(cfg.OpenClawConfigPath)
 	cfg.OpenClawWorkspacePath = filepath.Clean(cfg.OpenClawWorkspacePath)
+	cfg.OpenClawSkillsPath = filepath.Clean(cfg.OpenClawSkillsPath)
+	cfg.OpenClawBuiltinSkillsPath = filepath.Clean(cfg.OpenClawBuiltinSkillsPath)
 	return cfg, nil
 }
 

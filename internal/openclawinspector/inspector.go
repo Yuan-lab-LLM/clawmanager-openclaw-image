@@ -13,8 +13,9 @@ import (
 )
 
 type Inspector struct {
-	configPath    string
-	workspacePath string
+	configPath        string
+	workspacePath     string
+	builtinSkillsPath string
 }
 
 type Snapshot struct {
@@ -26,10 +27,11 @@ type Snapshot struct {
 	ConfigExists bool           `json:"config_exists"`
 }
 
-func New(configPath string, workspacePath string) *Inspector {
+func New(configPath string, workspacePath string, builtinSkillsPath string) *Inspector {
 	return &Inspector{
-		configPath:    configPath,
-		workspacePath: workspacePath,
+		configPath:        configPath,
+		workspacePath:     workspacePath,
+		builtinSkillsPath: builtinSkillsPath,
 	}
 }
 
@@ -80,19 +82,29 @@ func (i *Inspector) detectVersion() string {
 }
 
 func (i *Inspector) countSkills() int {
-	skillsDir := filepath.Join(i.workspacePath, "skills")
-	entries, err := os.ReadDir(skillsDir)
+	return countSkillEntries(filepath.Join(i.workspacePath, "skills")) + countSkillEntries(i.builtinSkillsPath)
+}
+
+func countSkillEntries(root string) int {
+	if strings.TrimSpace(root) == "" {
+		return 0
+	}
+	entries, err := os.ReadDir(root)
 	if err != nil {
 		return 0
 	}
 
 	count := 0
 	for _, entry := range entries {
+		name := entry.Name()
+		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".disabled") {
+			continue
+		}
 		if entry.IsDir() {
 			count++
 			continue
 		}
-		if strings.EqualFold(filepath.Ext(entry.Name()), ".md") {
+		if strings.EqualFold(filepath.Ext(name), ".md") {
 			count++
 		}
 	}

@@ -34,6 +34,8 @@ COPY --from=node-runtime /usr/local /usr/local
 RUN npm install -g openclaw@latest
 
 COPY defaults-template/.openclaw /defaults/.openclaw
+
+RUN HOME=/defaults openclaw plugins install @dingtalk-real-ai/dingtalk-connector
 COPY defaults-template/.config /defaults/.config
 COPY config/openclaw-agent /defaults/openclaw-agent
 COPY scripts/99-openclaw-sync /custom-cont-init.d/99-openclaw-sync

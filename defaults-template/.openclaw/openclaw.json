@@ -26,7 +26,7 @@
       "providers": {
         "auto": {
           "baseUrl": "https://xxxxx/v1",
-          "apiKey": "sk-xxxxxxx",
+          "apiKey": "",
           "api": "openai-completions",
           "models": [
             {

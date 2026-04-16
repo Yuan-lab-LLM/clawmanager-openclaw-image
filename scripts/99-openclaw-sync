@@ -1,18 +1,53 @@
 #!/bin/bash
+set -euo pipefail
 
 # Path Definitions
 CONFIG_FILE="/config/.openclaw/openclaw.json"
+STATE_DIR="/config/.openclaw"
 DEFAULT_SOURCE="/defaults/.openclaw"
 AUTOSTART_DIR="/config/.config/autostart"
 AUTOSTART_DEFAULT="/defaults/.config/autostart"
 AGENT_GATEWAY_AUTOSTART="$AUTOSTART_DIR/openclaw-gateway.desktop"
+EXTENSIONS_DIR="$STATE_DIR/extensions"
+
+first_non_empty() {
+    local value
+    for value in "$@"; do
+        if [ -n "$value" ]; then
+            printf '%s' "$value"
+            return 0
+        fi
+    done
+    return 1
+}
+
+env_is_set() {
+    local name="$1"
+    [ "${!name+x}" = "x" ]
+}
+
+LLM_BASE_URL="$(first_non_empty "${CLAWMANAGER_LLM_BASE_URL:-}" "${OPENAI_BASE_URL:-}" || true)"
+LLM_MODEL="${CLAWMANAGER_LLM_MODEL:-}"
+LLM_API_KEY=""
+LLM_API_KEY_SET="false"
+if env_is_set CLAWMANAGER_LLM_API_KEY; then
+    LLM_API_KEY="${CLAWMANAGER_LLM_API_KEY}"
+    LLM_API_KEY_SET="true"
+elif env_is_set OPENAI_API_KEY; then
+    LLM_API_KEY="${OPENAI_API_KEY}"
+    LLM_API_KEY_SET="true"
+fi
 
 # 1. Initial Sync from Defaults
-if [ ! -d "/config/.openclaw" ] || [ ! -f "$CONFIG_FILE" ]; then
+if [ ! -d "$STATE_DIR" ] || [ ! -f "$CONFIG_FILE" ]; then
     echo "[OpenClaw] Syncing config from defaults..."
-    mkdir -p /config/.openclaw
-    cp -rp "$DEFAULT_SOURCE/." /config/.openclaw/
+    mkdir -p "$STATE_DIR"
+    cp -rp "$DEFAULT_SOURCE/." "$STATE_DIR/"
 fi
+
+# 1a. Ensure the OpenClaw state has a user extensions directory so external
+# channel plugins can be mounted or copied into a predictable location.
+mkdir -p "$EXTENSIONS_DIR"
 
 # 1b. XFCE login autostart: when agent mode is enabled, the agent must be the only
 # process manager for openclaw, so remove the legacy desktop autostart entry.
@@ -43,66 +78,165 @@ fi
 echo "[OpenClaw] Starting environment injection..."
 
 # --- Base URL ---
-if [ -n "$CLAWMANAGER_LLM_BASE_URL" ]; then
+if [ -n "$LLM_BASE_URL" ]; then
     echo "-> Injecting Base URL..."
-    sed -i "s@\"baseUrl\":[[:space:]]*\"[^\"]*\"@\"baseUrl\": \"$CLAWMANAGER_LLM_BASE_URL\"@g" "$CONFIG_FILE"
 fi
 
 # --- API Key ---
-if [ -n "$CLAWMANAGER_LLM_API_KEY" ]; then
+if [ "$LLM_API_KEY_SET" = "true" ]; then
     echo "-> Injecting API Key..."
-    sed -i "s@\"apiKey\":[[:space:]]*\"[^\"]*\"@\"apiKey\": \"$CLAWMANAGER_LLM_API_KEY\"@g" "$CONFIG_FILE"
 fi
 
 # --- Model ID (Full Replace with auto/ preservation) ---
-if [ -n "$CLAWMANAGER_LLM_MODEL" ]; then
-    echo "-> Injecting Model ID: $CLAWMANAGER_LLM_MODEL"
+if [ -n "$LLM_MODEL" ]; then
+    if [ "${CLAWMANAGER_AGENT_ENABLED:-}" = "true" ]; then
+        echo "-> Agent mode enabled; deferring model injection to openclaw-agent"
+    elif [[ "$LLM_MODEL" =~ ^[[:space:]]*\[ ]]; then
+        echo "-> Detected model list JSON; skipping legacy sed-based model injection"
+    else
+        echo "-> Injecting Model ID: $LLM_MODEL"
 
-    # A. Replace "id": "xxx"
-    sed -i "s@\"id\":[[:space:]]*\"[^\"]*\"@\"id\": \"$CLAWMANAGER_LLM_MODEL\"@g" "$CONFIG_FILE"
+        # A. Replace "id": "xxx"
+        sed -i "s@\"id\":[[:space:]]*\"[^\"]*\"@\"id\": \"$LLM_MODEL\"@g" "$CONFIG_FILE"
 
-    # B. Replace "primary": "auto/xxx" (Preserves auto/)
-    sed -i "s@\"primary\":[[:space:]]*\"auto/[^\"]*\"@\"primary\": \"auto/$CLAWMANAGER_LLM_MODEL\"@g" "$CONFIG_FILE"
+        # B. Replace "primary": "auto/xxx" (Preserves auto/)
+        sed -i "s@\"primary\":[[:space:]]*\"auto/[^\"]*\"@\"primary\": \"auto/$LLM_MODEL\"@g" "$CONFIG_FILE"
 
-    # C. Replace Key-style "auto/xxx": {} (Preserves auto/)
-    sed -i "s@\"auto/[^\"]*\":[[:space:]]*{}@\"auto/$CLAWMANAGER_LLM_MODEL\": {}@g" "$CONFIG_FILE"
+        # C. Replace Key-style "auto/xxx": {} (Preserves auto/)
+        sed -i "s@\"auto/[^\"]*\":[[:space:]]*{}@\"auto/$LLM_MODEL\": {}@g" "$CONFIG_FILE"
+    fi
 fi
 
-# --- Channels (JSON object: feishu / slack / telegram / ... merged into channels) ---
-if [ -n "$CLAWMANAGER_OPENCLAW_CHANNELS_JSON" ]; then
-    echo "-> Injecting channel config..."
-    export OPENCLAW_CONFIG_FILE="$CONFIG_FILE"
-    node <<'NODE'
+# --- Channels / plugin records ---
+echo "-> Reconciling channel config..."
+export OPENCLAW_CONFIG_FILE="$CONFIG_FILE"
+export OPENCLAW_EXTENSIONS_DIR="$EXTENSIONS_DIR"
+export OPENCLAW_LLM_BASE_URL="$LLM_BASE_URL"
+export OPENCLAW_LLM_API_KEY="$LLM_API_KEY"
+export OPENCLAW_LLM_API_KEY_SET="$LLM_API_KEY_SET"
+node <<'NODE'
 const fs = require('fs');
-const path = process.env.OPENCLAW_CONFIG_FILE;
+const path = require('path');
+const configPath = process.env.OPENCLAW_CONFIG_FILE;
+const extensionsDir = process.env.OPENCLAW_EXTENSIONS_DIR;
 const raw = process.env.CLAWMANAGER_OPENCLAW_CHANNELS_JSON;
-let parsed;
-try {
-  parsed = JSON.parse(raw);
-} catch (e) {
-  console.error('[OpenClaw] CLAWMANAGER_OPENCLAW_CHANNELS_JSON is not valid JSON:', e.message);
+const llmBaseUrl = process.env.OPENCLAW_LLM_BASE_URL || '';
+const llmAPIKey = process.env.OPENCLAW_LLM_API_KEY || '';
+const llmAPIKeySet = process.env.OPENCLAW_LLM_API_KEY_SET === 'true';
+const installPathPrefix = '/defaults/.openclaw/extensions/';
+
+function fail(message) {
+  console.error(message);
   process.exit(1);
 }
-if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-  console.error('[OpenClaw] CLAWMANAGER_OPENCLAW_CHANNELS_JSON must be a JSON object.');
-  process.exit(1);
+
+function readJSONFile(filePath, description) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (e) {
+    fail(`[OpenClaw] Failed to read ${description}: ${e.message}`);
+  }
 }
-let cfg;
-try {
-  cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
-} catch (e) {
-  console.error('[OpenClaw] Failed to read config:', e.message);
-  process.exit(1);
+
+function parseOptionalJSONObject(rawValue, description) {
+  if (!rawValue || rawValue.trim() === '') {
+    return {};
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(rawValue);
+  } catch (e) {
+    fail(`[OpenClaw] ${description} is not valid JSON: ${e.message}`);
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    fail(`[OpenClaw] ${description} must be a JSON object.`);
+  }
+  return parsed;
 }
-if (!cfg.channels) cfg.channels = {};
-Object.assign(cfg.channels, parsed);
-const tmp = path + '.tmp.' + process.pid;
+
+function ensureObject(root, key) {
+  if (!root[key] || typeof root[key] !== 'object' || Array.isArray(root[key])) {
+    root[key] = {};
+  }
+  return root[key];
+}
+
+function rewriteInstalledPluginPaths(root) {
+  const plugins = root.plugins;
+  if (!plugins || typeof plugins !== 'object' || Array.isArray(plugins)) return;
+  const installs = plugins.installs;
+  if (!installs || typeof installs !== 'object' || Array.isArray(installs)) return;
+
+  for (const install of Object.values(installs)) {
+    if (!install || typeof install !== 'object' || Array.isArray(install)) continue;
+    if (typeof install.installPath !== 'string') continue;
+    if (!install.installPath.startsWith(installPathPrefix)) continue;
+    install.installPath = path.posix.join(
+      extensionsDir,
+      install.installPath.slice(installPathPrefix.length),
+    );
+  }
+}
+
+const manifestName = 'openclaw.plugin.json';
+const bundledExtensionsDir = '/usr/local/lib/node_modules/openclaw/dist/extensions';
+
+function collectSupportedChannelIds(rootDir, supported) {
+  if (!rootDir || !fs.existsSync(rootDir)) return;
+  for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const manifestPath = path.join(rootDir, entry.name, manifestName);
+    if (!fs.existsSync(manifestPath)) continue;
+    try {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      if (Array.isArray(manifest.channels)) {
+        for (const id of manifest.channels) {
+          if (typeof id === 'string' && id.trim()) supported.add(id.trim());
+        }
+      }
+    } catch (e) {
+      console.warn(`[OpenClaw] Skipping invalid plugin manifest ${manifestPath}: ${e.message}`);
+    }
+  }
+}
+
+function sanitizeChannels(source, label) {
+  const sanitized = {};
+  for (const [channelId, channelConfig] of Object.entries(source)) {
+    if (supportedChannelIds.has(channelId)) {
+      sanitized[channelId] = channelConfig;
+      continue;
+    }
+    console.warn(`[OpenClaw] Skipping unsupported channel "${channelId}" from ${label}; no matching extension was found.`);
+  }
+  return sanitized;
+}
+
+const parsed = parseOptionalJSONObject(raw, 'CLAWMANAGER_OPENCLAW_CHANNELS_JSON');
+const cfg = readJSONFile(configPath, 'config');
+const models = ensureObject(cfg, 'models');
+const providers = ensureObject(models, 'providers');
+const autoProvider = ensureObject(providers, 'auto');
+if (llmBaseUrl) {
+  autoProvider.baseUrl = llmBaseUrl;
+}
+if (llmAPIKeySet) {
+  autoProvider.apiKey = llmAPIKey;
+}
+rewriteInstalledPluginPaths(cfg);
+const supportedChannelIds = new Set();
+collectSupportedChannelIds(bundledExtensionsDir, supportedChannelIds);
+collectSupportedChannelIds(extensionsDir, supportedChannelIds);
+cfg.channels = ensureObject(cfg, 'channels');
+cfg.channels = sanitizeChannels(cfg.channels, 'existing config');
+Object.assign(cfg.channels, sanitizeChannels(parsed, 'CLAWMANAGER_OPENCLAW_CHANNELS_JSON'));
+
+const tmp = configPath + '.tmp.' + process.pid;
 const out = JSON.stringify(cfg, null, 4) + '\n';
 fs.writeFileSync(tmp, out, 'utf8');
-fs.renameSync(tmp, path);
+fs.renameSync(tmp, configPath);
 NODE
-fi
 
 # 3. Final Permissions Check
-chown -R abc:abc /config/.openclaw
+chown -R abc:abc "$STATE_DIR"
 echo "[OpenClaw] All tasks completed."

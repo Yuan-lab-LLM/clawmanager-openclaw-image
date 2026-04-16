@@ -16,12 +16,17 @@ FROM ghcr.io/yuan-lab-llm/clawmanager-openclaw-image/openclaw@sha256:403d9864391
 # Pin to the last known-good published image stack to avoid upstream
 # webtop/GTK/OpenClaw drift breaking the XFCE desktop at runtime.
 COPY defaults-template/.config /defaults/.config
+# Seed the runtime template under /defaults so the first /config sync gets the
+# tracked OpenClaw config plus any files the image expects to manage.
+COPY defaults-template/.openclaw /defaults/.openclaw
 COPY config/openclaw-agent /defaults/openclaw-agent
 COPY scripts/99-openclaw-sync /custom-cont-init.d/99-openclaw-sync
 COPY --from=agent-builder /out/openclaw-agent /usr/local/bin/openclaw-agent
 COPY scripts/openclaw-agent-run /etc/services.d/openclaw-agent/run
 COPY scripts/openclaw-agent-finish /etc/services.d/openclaw-agent/finish
 
+# Preinstall the DingTalk channel so its channel id validates before the
+# container's first boot-time config sync.
 RUN sed -i 's/\r$//' /custom-cont-init.d/99-openclaw-sync \
   && sed -i 's/\r$//' /etc/services.d/openclaw-agent/run \
   && sed -i 's/\r$//' /etc/services.d/openclaw-agent/finish \
@@ -29,6 +34,7 @@ RUN sed -i 's/\r$//' /custom-cont-init.d/99-openclaw-sync \
   && chmod +x /etc/services.d/openclaw-agent/run \
   && chmod +x /etc/services.d/openclaw-agent/finish \
   && chmod +x /usr/local/bin/openclaw-agent \
+  && HOME=/defaults openclaw plugins install @dingtalk-real-ai/dingtalk-connector \
   && chown -R abc:abc /defaults/.openclaw \
   && chown -R abc:abc /defaults/.config \
   && mkdir -p /var/lib/openclaw-agent /var/log/openclaw-agent /etc/openclaw-agent

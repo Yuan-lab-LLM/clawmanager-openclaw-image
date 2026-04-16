@@ -104,6 +104,10 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		}
 	}()
 
+	if err := s.config.NormalizeActiveConfig(); err != nil {
+		return fmt.Errorf("normalize openclaw config: %w", err)
+	}
+
 	if snapshot := s.process.Snapshot(); snapshot.Status == process.StatusStopped || snapshot.Status == process.StatusUnknown {
 		if err := s.process.Start(ctx); err != nil {
 			return fmt.Errorf("start openclaw on boot: %w", err)

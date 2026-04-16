@@ -47,6 +47,13 @@ func (m *Manager) ApplyRevision(ctx context.Context, revisionID string) (map[str
 	if err := validateJSON(content); err != nil {
 		return nil, err
 	}
+	content, err = normalizeConfigContent(content)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateJSON(content); err != nil {
+		return nil, err
+	}
 
 	stagingDir := filepath.Join(m.cfg.AgentDataDir, "config-staging")
 	backupDir := filepath.Join(m.cfg.AgentDataDir, "config-backup")

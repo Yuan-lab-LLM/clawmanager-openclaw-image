@@ -8,17 +8,32 @@ RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /out/openclaw-agent ./cmd/openclaw-agent
+# BuildKit 多架构构建时注入 TARGET*；与最终镜像架构一致（勿写死 amd64）
+ARG TARGETOS=linux
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/openclaw-agent ./cmd/openclaw-agent
 
 
-FROM ghcr.io/yuan-lab-llm/clawmanager-openclaw-image/openclaw@sha256:403d9864391213fc844a6e2bbe3949e82018a7fa4ee488eb62bcc2612e528c18
+FROM lscr.io/linuxserver/webtop:ubuntu-xfce
 
-# Base images may still ship the legacy linuxserver custom init hook; bootstrap
-# now runs inside openclaw-agent, so remove the old script to avoid double work.
-RUN rm -f /custom-cont-init.d/99-openclaw-sync
+ENV PUID=1000
+ENV PGID=1000
+ENV TZ=Asia/Shanghai
 
-# Pin to the last known-good published image stack to avoid upstream
-# webtop/GTK/OpenClaw drift breaking the XFCE desktop at runtime.
+LABEL shm_size="1gb"
+
+# Install Node.js 22 runtime and OpenClaw CLI.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+  && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
+  && npm install -g openclaw@latest \
+  && node -e "const [maj,min]=process.versions.node.split('.').map(Number); if(maj<22 || (maj===22 && min<12)){console.error('Node.js >=22.12 required, current '+process.versions.node); process.exit(1)}" \
+  && openclaw --version >/dev/null \
+  && npm cache clean --force \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY defaults-template/.config /defaults/.config
 # Seed the runtime template under /defaults so the first /config sync gets the
 # tracked OpenClaw config plus any files the image expects to manage.
@@ -39,3 +54,5 @@ RUN sed -i 's/\r$//' /etc/services.d/openclaw-agent/run \
   && chown -R abc:abc /defaults/.openclaw \
   && chown -R abc:abc /defaults/.config \
   && mkdir -p /var/lib/openclaw-agent /var/log/openclaw-agent /etc/openclaw-agent
+
+EXPOSE 3000 3001

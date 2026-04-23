@@ -31,6 +31,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 在 ubuntu-amd64 上构建 linux/arm64 需要 QEMU（Buildx 会用它做跨平台编译）
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -74,6 +78,8 @@ jobs:
           context: .
           file: Dockerfile.openclaw
           push: true
+          # 多架构清单：同一 tag 下包含 amd64 + arm64（Apple Silicon / ARM 服务器拉取时可原生运行）
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ steps.image.outputs.image }}:latest
             ${{ steps.image.outputs.image }}:${{ steps.image.outputs.version }}

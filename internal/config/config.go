@@ -17,59 +17,59 @@ const (
 )
 
 type Config struct {
-	InstanceID                string        `yaml:"instance_id"`
-	BootstrapToken            string        `yaml:"bootstrap_token"`
-	ControlPlaneBaseURL       string        `yaml:"control_plane_base_url"`
-	AgentDataDir              string        `yaml:"agent_data_dir"`
-	DiskUsagePath             string        `yaml:"disk_usage_path"`
-	DiskLimitBytes            uint64        `yaml:"disk_limit_bytes"`
-	InitialConfigRevisionID   string        `yaml:"initial_config_revision_id"`
-	ProtocolVersion           string        `yaml:"protocol_version"`
-	LocalHTTPBind             string        `yaml:"local_http_bind"`
-	LogFilePath               string        `yaml:"log_file_path"`
-	OpenClawCommand           []string      `yaml:"openclaw_command"`
-	OpenClawConfigPath           string `yaml:"openclaw_config_path"`
-	OpenClawWorkspacePath        string `yaml:"openclaw_workspace_path"`
-	OpenClawSkillsPath           string `yaml:"openclaw_skills_path"`
-	OpenClawBuiltinSkillsPath    string `yaml:"openclaw_builtin_skills_path"`
-	OpenClawHealthURL            string `yaml:"openclaw_health_url"`
-	OpenClawDefaultsDir          string `yaml:"openclaw_defaults_dir"`
-	AutostartDefaultsDir         string `yaml:"autostart_defaults_dir"`
-	AutostartTargetDir           string `yaml:"autostart_target_dir"`
-	OpenClawExtensionsDir        string `yaml:"openclaw_extensions_dir"`
-	OpenClawBundledExtensionsDir string `yaml:"openclaw_bundled_extensions_dir"`
-	InstalledPluginPathPrefix    string `yaml:"installed_plugin_path_prefix"`
-	DropUserName                 string `yaml:"drop_user_name"`
-	HeartbeatInterval         time.Duration `yaml:"-"`
-	StateReportInterval       time.Duration `yaml:"-"`
-	CommandPollInterval       time.Duration `yaml:"-"`
-	CommandPollBackoffMax     time.Duration `yaml:"-"`
-	RegisterRetryInterval     time.Duration `yaml:"-"`
-	ProcessStopTimeout        time.Duration `yaml:"-"`
-	SkillIncrementalInterval  time.Duration `yaml:"-"`
-	SkillFullSyncInterval     time.Duration `yaml:"-"`
-	MaxAutoRestart            int           `yaml:"max_auto_restart"`
-	HeartbeatIntervalRaw      string        `yaml:"heartbeat_interval"`
-	StateReportIntervalRaw    string        `yaml:"state_report_interval"`
-	CommandPollIntervalRaw    string        `yaml:"command_poll_interval"`
-	CommandPollBackoffMaxRaw  string        `yaml:"command_poll_backoff_max"`
-	RegisterRetryIntervalRaw  string        `yaml:"register_retry_interval"`
-	ProcessStopTimeoutRaw     string        `yaml:"process_stop_timeout"`
-	SkillIncrementalRaw       string        `yaml:"skill_incremental_interval"`
-	SkillFullSyncRaw          string        `yaml:"skill_full_sync_interval"`
+	InstanceID                   string        `yaml:"instance_id"`
+	BootstrapToken               string        `yaml:"bootstrap_token"`
+	ControlPlaneBaseURL          string        `yaml:"control_plane_base_url"`
+	AgentDataDir                 string        `yaml:"agent_data_dir"`
+	DiskUsagePath                string        `yaml:"disk_usage_path"`
+	DiskLimitBytes               uint64        `yaml:"disk_limit_bytes"`
+	InitialConfigRevisionID      string        `yaml:"initial_config_revision_id"`
+	ProtocolVersion              string        `yaml:"protocol_version"`
+	LocalHTTPBind                string        `yaml:"local_http_bind"`
+	LogFilePath                  string        `yaml:"log_file_path"`
+	OpenClawCommand              []string      `yaml:"openclaw_command"`
+	OpenClawConfigPath           string        `yaml:"openclaw_config_path"`
+	OpenClawWorkspacePath        string        `yaml:"openclaw_workspace_path"`
+	OpenClawSkillsPath           string        `yaml:"openclaw_skills_path"`
+	OpenClawBuiltinSkillsPath    string        `yaml:"openclaw_builtin_skills_path"`
+	OpenClawHealthURL            string        `yaml:"openclaw_health_url"`
+	OpenClawDefaultsDir          string        `yaml:"openclaw_defaults_dir"`
+	AutostartDefaultsDir         string        `yaml:"autostart_defaults_dir"`
+	AutostartTargetDir           string        `yaml:"autostart_target_dir"`
+	OpenClawExtensionsDir        string        `yaml:"openclaw_extensions_dir"`
+	OpenClawBundledExtensionsDir string        `yaml:"openclaw_bundled_extensions_dir"`
+	InstalledPluginPathPrefix    string        `yaml:"installed_plugin_path_prefix"`
+	DropUserName                 string        `yaml:"drop_user_name"`
+	HeartbeatInterval            time.Duration `yaml:"-"`
+	StateReportInterval          time.Duration `yaml:"-"`
+	CommandPollInterval          time.Duration `yaml:"-"`
+	CommandPollBackoffMax        time.Duration `yaml:"-"`
+	RegisterRetryInterval        time.Duration `yaml:"-"`
+	ProcessStopTimeout           time.Duration `yaml:"-"`
+	SkillIncrementalInterval     time.Duration `yaml:"-"`
+	SkillFullSyncInterval        time.Duration `yaml:"-"`
+	MaxAutoRestart               int           `yaml:"max_auto_restart"`
+	HeartbeatIntervalRaw         string        `yaml:"heartbeat_interval"`
+	StateReportIntervalRaw       string        `yaml:"state_report_interval"`
+	CommandPollIntervalRaw       string        `yaml:"command_poll_interval"`
+	CommandPollBackoffMaxRaw     string        `yaml:"command_poll_backoff_max"`
+	RegisterRetryIntervalRaw     string        `yaml:"register_retry_interval"`
+	ProcessStopTimeoutRaw        string        `yaml:"process_stop_timeout"`
+	SkillIncrementalRaw          string        `yaml:"skill_incremental_interval"`
+	SkillFullSyncRaw             string        `yaml:"skill_full_sync_interval"`
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		AgentDataDir:              "/var/lib/openclaw-agent",
-		DiskUsagePath:             "/config",
-		ProtocolVersion:           "v1",
-		LocalHTTPBind:             "0.0.0.0:18080",
-		LogFilePath:               "/var/log/openclaw-agent/agent.log",
-		OpenClawCommand:           []string{"openclaw", "gateway", "run"},
-		OpenClawConfigPath:        "/config/.openclaw/openclaw.json",
-		OpenClawWorkspacePath:     "/config/.openclaw/workspace",
-		OpenClawSkillsPath:        "/config/.openclaw/workspace/skills",
+		AgentDataDir:                 "/var/lib/openclaw-agent",
+		DiskUsagePath:                "/config",
+		ProtocolVersion:              "v1",
+		LocalHTTPBind:                "0.0.0.0:18080",
+		LogFilePath:                  "/var/log/openclaw-agent/agent.log",
+		OpenClawCommand:              []string{"openclaw", "gateway", "run"},
+		OpenClawConfigPath:           "/config/.openclaw/openclaw.json",
+		OpenClawWorkspacePath:        "/config/.openclaw/workspace",
+		OpenClawSkillsPath:           "/config/.openclaw/workspace/skills",
 		OpenClawBuiltinSkillsPath:    "/usr/lib/node_modules/openclaw/skills",
 		OpenClawHealthURL:            "http://127.0.0.1:18789/health",
 		OpenClawDefaultsDir:          "/defaults/.openclaw",
@@ -79,15 +79,15 @@ func Load() (Config, error) {
 		OpenClawBundledExtensionsDir: "/usr/local/lib/node_modules/openclaw/dist/extensions",
 		InstalledPluginPathPrefix:    "/defaults/.openclaw/extensions/",
 		DropUserName:                 "abc",
-		HeartbeatIntervalRaw:      "15s",
-		StateReportIntervalRaw:    "45s",
-		CommandPollIntervalRaw:    "5s",
-		CommandPollBackoffMaxRaw:  "60s",
-		RegisterRetryIntervalRaw:  "10s",
-		ProcessStopTimeoutRaw:     "20s",
-		SkillIncrementalRaw:       "30s",
-		SkillFullSyncRaw:          "12h",
-		MaxAutoRestart:            3,
+		HeartbeatIntervalRaw:         "15s",
+		StateReportIntervalRaw:       "45s",
+		CommandPollIntervalRaw:       "5s",
+		CommandPollBackoffMaxRaw:     "60s",
+		RegisterRetryIntervalRaw:     "10s",
+		ProcessStopTimeoutRaw:        "20s",
+		SkillIncrementalRaw:          "30s",
+		SkillFullSyncRaw:             "12h",
+		MaxAutoRestart:               3,
 	}
 
 	path := envOrDefault("OPENCLAW_AGENT_CONFIG_PATH", defaultConfigPath)

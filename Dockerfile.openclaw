@@ -13,6 +13,7 @@ ARG TARGETOS=linux
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /out/openclaw-agent ./cmd/openclaw-agent
 
+FROM node:22-bookworm-slim AS node-runtime
 
 FROM lscr.io/linuxserver/webtop:ubuntu-xfce
 
@@ -22,17 +23,14 @@ ENV TZ=Asia/Shanghai
 
 LABEL shm_size="1gb"
 
-# Install Node.js 22 runtime and OpenClaw CLI.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
-  && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
-  && apt-get install -y --no-install-recommends nodejs \
-  && npm install -g openclaw@latest \
-  && node -e "const [maj,min]=process.versions.node.split('.').map(Number); if(maj<22 || (maj===22 && min<12)){console.error('Node.js >=22.12 required, current '+process.versions.node); process.exit(1)}" \
-  && openclaw --version >/dev/null \
-  && npm cache clean --force \
-  && apt-get clean \
+  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    ca-certificates \
   && rm -rf /var/lib/apt/lists/*
+
+COPY --from=node-runtime /usr/local /usr/local
+
+RUN npm install -g openclaw@v2026.4.15
 
 COPY defaults-template/.config /defaults/.config
 # Seed the runtime template under /defaults so the first /config sync gets the

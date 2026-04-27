@@ -93,7 +93,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	errCh := make(chan error, 4)
+	errCh := make(chan error, 5)
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -107,6 +107,10 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	if err := s.config.NormalizeActiveConfig(); err != nil {
 		return fmt.Errorf("normalize openclaw config: %w", err)
 	}
+	if err := s.config.CaptureModelBaseline(); err != nil {
+		return fmt.Errorf("capture openclaw model baseline: %w", err)
+	}
+	s.logger.Printf("openclaw model guard armed")
 
 	if snapshot := s.process.Snapshot(); snapshot.Status == process.StatusStopped || snapshot.Status == process.StatusUnknown {
 		if err := s.process.Start(ctx); err != nil {
@@ -114,6 +118,12 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		}
 		s.logger.Printf("openclaw bootstrap start issued")
 	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.modelGuardLoop(ctx)
+	}()
 
 	if err := s.ensureSession(ctx); err != nil {
 		return err
@@ -377,6 +387,35 @@ func (s *Supervisor) commandLoop(ctx context.Context, errCh chan<- error) {
 		}
 		if err := s.executor.Execute(ctx, cmd); err != nil {
 			s.logger.Printf("command execute failed id=%d type=%s err=%v", cmd.ID, cmd.Type, err)
+		}
+	}
+}
+
+func (s *Supervisor) modelGuardLoop(ctx context.Context) {
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			restored, err := s.config.EnforceModelBaseline()
+			if err != nil {
+				s.logger.Printf("model guard check failed: %v", err)
+				continue
+			}
+			if !restored {
+				continue
+			}
+
+			s.logger.Printf("detected model field change in openclaw config; restored baseline and restarting openclaw")
+			restartCtx, cancel := context.WithTimeout(ctx, s.cfg.ProcessStopTimeout+30*time.Second)
+			err = s.process.Restart(restartCtx)
+			cancel()
+			if err != nil {
+				s.logger.Printf("restart openclaw after model restore failed: %v", err)
+			}
 		}
 	}
 }

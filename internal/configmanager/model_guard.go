@@ -1,0 +1,210 @@
+package configmanager
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+)
+
+const (
+	agentsKey         = "agents"
+	defaultsKey       = "defaults"
+	defaultModelKey   = "model"
+	modelsKey         = "models"
+	providersKey      = "providers"
+	autoProviderKey   = "auto"
+	baseURLKey        = "baseUrl"
+	apiKeyKey         = "apiKey"
+	providerModelsKey = "models"
+)
+
+type modelBaselineEntry struct {
+	path   []string
+	value  any
+	exists bool
+}
+
+func modelGuardPaths() [][]string {
+	return [][]string{
+		{modelsKey, providersKey, autoProviderKey, baseURLKey},
+		{modelsKey, providersKey, autoProviderKey, apiKeyKey},
+		{modelsKey, providersKey, autoProviderKey, providerModelsKey},
+		{agentsKey, defaultsKey, defaultModelKey},
+	}
+}
+
+// CaptureModelBaseline snapshots model-related fields from the current
+// openclaw.json, which are treated as locked initial model config.
+func (m *Manager) CaptureModelBaseline() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	content, err := os.ReadFile(m.cfg.OpenClawConfigPath)
+	if err != nil {
+		return fmt.Errorf("read openclaw config for model baseline: %w", err)
+	}
+	parsed, err := parseConfigJSON(content)
+	if err != nil {
+		return fmt.Errorf("parse openclaw config for model baseline: %w", err)
+	}
+
+	return m.setModelBaselineLocked(parsed)
+}
+
+func (m *Manager) setModelBaselineLocked(parsed map[string]any) error {
+	baselines := make([]modelBaselineEntry, 0, len(modelGuardPaths()))
+	for _, path := range modelGuardPaths() {
+		current, exists := nestedValue(parsed, path...)
+		var cloned any
+		if exists {
+			clonedValue, err := cloneJSONValue(current)
+			if err != nil {
+				return fmt.Errorf("clone model baseline at %v: %w", path, err)
+			}
+			cloned = clonedValue
+		}
+		baselines = append(baselines, modelBaselineEntry{
+			path:   append([]string(nil), path...),
+			value:  cloned,
+			exists: exists,
+		})
+	}
+	m.modelBaselines = baselines
+	m.modelBaselineSet = true
+	return nil
+}
+
+// EnforceModelBaseline restores model-related fields to the captured
+// baseline when it has been modified. The returned bool reports whether
+// a restore write happened.
+func (m *Manager) EnforceModelBaseline() (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !m.modelBaselineSet {
+		return false, nil
+	}
+
+	content, err := os.ReadFile(m.cfg.OpenClawConfigPath)
+	if err != nil {
+		return false, fmt.Errorf("read openclaw config for model check: %w", err)
+	}
+	parsed, err := parseConfigJSON(content)
+	if err != nil {
+		return false, fmt.Errorf("parse openclaw config for model check: %w", err)
+	}
+
+	changed := false
+	for _, baseline := range m.modelBaselines {
+		current, exists := nestedValue(parsed, baseline.path...)
+		if exists == baseline.exists && jsonValuesEqual(current, baseline.value) {
+			continue
+		}
+		changed = true
+		if baseline.exists {
+			cloned, err := cloneJSONValue(baseline.value)
+			if err != nil {
+				return false, fmt.Errorf("clone model baseline for restore at %v: %w", baseline.path, err)
+			}
+			setNestedValue(parsed, cloned, baseline.path...)
+			continue
+		}
+		deleteNestedValue(parsed, baseline.path...)
+	}
+
+	if !changed {
+		return false, nil
+	}
+
+	rewritten, err := rewriteConfig(parsed)
+	if err != nil {
+		return false, err
+	}
+	if err := os.WriteFile(m.cfg.OpenClawConfigPath, rewritten, 0o600); err != nil {
+		return false, fmt.Errorf("write restored model to openclaw config: %w", err)
+	}
+
+	return true, nil
+}
+
+func nestedValue(root map[string]any, path ...string) (any, bool) {
+	current := any(root)
+	for idx, key := range path {
+		obj, ok := current.(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		next, ok := obj[key]
+		if !ok {
+			return nil, false
+		}
+		if idx == len(path)-1 {
+			return next, true
+		}
+		current = next
+	}
+	return nil, false
+}
+
+func nestedMap(root map[string]any, path ...string) (map[string]any, bool) {
+	current := root
+	for _, key := range path {
+		next, ok := current[key].(map[string]any)
+		if !ok {
+			return nil, false
+		}
+		current = next
+	}
+	return current, true
+}
+
+func setNestedValue(root map[string]any, value any, path ...string) {
+	if len(path) == 0 {
+		return
+	}
+	parent := root
+	for _, key := range path[:len(path)-1] {
+		parent = ensureObject(parent, key)
+	}
+	parent[path[len(path)-1]] = value
+}
+
+func deleteNestedValue(root map[string]any, path ...string) {
+	if len(path) == 0 {
+		return
+	}
+	parent := root
+	for _, key := range path[:len(path)-1] {
+		next, ok := parent[key].(map[string]any)
+		if !ok {
+			return
+		}
+		parent = next
+	}
+	delete(parent, path[len(path)-1])
+}
+
+func cloneJSONValue(value any) (any, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var cloned any
+	if err := json.Unmarshal(raw, &cloned); err != nil {
+		return nil, err
+	}
+	return cloned, nil
+}
+
+func jsonValuesEqual(a, b any) bool {
+	left, err := json.Marshal(a)
+	if err != nil {
+		return false
+	}
+	right, err := json.Marshal(b)
+	if err != nil {
+		return false
+	}
+	return bytes.Equal(left, right)
+}

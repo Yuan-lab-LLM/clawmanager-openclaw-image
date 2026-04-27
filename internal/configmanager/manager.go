@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	appconfig "github.com/iamlovingit/clawmanager-openclaw-image/internal/config"
@@ -24,6 +25,10 @@ type Manager struct {
 	cfg    appconfig.Config
 	client revisionClient
 	store  *store.Store
+
+	mu               sync.Mutex
+	modelBaselines   []modelBaselineEntry
+	modelBaselineSet bool
 }
 
 func New(cfg appconfig.Config, client revisionClient, st *store.Store) *Manager {
@@ -54,6 +59,10 @@ func (m *Manager) ApplyRevision(ctx context.Context, revisionID string) (map[str
 	if err := validateJSON(content); err != nil {
 		return nil, err
 	}
+	baselineParsed, err := parseConfigJSON(content)
+	if err != nil {
+		return nil, err
+	}
 
 	stagingDir := filepath.Join(m.cfg.AgentDataDir, "config-staging")
 	backupDir := filepath.Join(m.cfg.AgentDataDir, "config-backup")
@@ -75,12 +84,18 @@ func (m *Manager) ApplyRevision(ctx context.Context, revisionID string) (map[str
 		return nil, fmt.Errorf("mkdir backup: %w", err)
 	}
 
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	rollbackSucceeded := true
 	if data, err := os.ReadFile(activeFile); err == nil {
 		rollbackSucceeded = os.WriteFile(backupFile, data, 0o600) == nil
 	}
 	if err := os.Rename(stagingFile, activeFile); err != nil {
 		return nil, fmt.Errorf("activate config: %w", err)
+	}
+	if err := m.setModelBaselineLocked(baselineParsed); err != nil {
+		return nil, err
 	}
 
 	if err := m.store.Update(func(s *store.State) {
